@@ -80,8 +80,8 @@ def apply_htb_prio_tbf(switch, iface):
     Tudo encadeado.
     """
 
-    print(f"[QoS] Limpando configurações anteriores em {iface}")
-    #switch.cmd(f'tc qdisc del dev {iface} root')
+    #print(f"[QoS] Limpando configurações anteriores em {iface}")
+    #NAO PODE FAZER ISSO AQUI SENAO VAI REMOVER LIMITE DA REDE DO MININET-> switch.cmd(f'tc qdisc del dev {iface} root')
 
     # HTB como root qdisc
     switch.cmd(f'tc qdisc add dev {iface} root handle 1: htb default 30')
