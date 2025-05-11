@@ -31,7 +31,12 @@ def show_tc_config(switch, iface):
     print(switch.cmd(f'tc class show dev {iface}'))
     print(switch.cmd(f'tc filter show dev {iface}'))
 
+def show_tc_stats(switch, iface):
+    print(f"\n[DEBUG] Estatísticas das filas e classes em {iface} de {switch.name}:")
+    print(switch.cmd(f'tc -s qdisc show dev {iface}'))
+    print(switch.cmd(f'tc -s class show dev {iface}'))
 
+#DADO PELO PROFESSOR 
 def apply_egress_with_priority(switch, iface):
     """
     Aplica prioridade absoluta ao tráfego RTP usando a disciplina de enfileiramento 'prio'.
@@ -71,6 +76,7 @@ def apply_egress_with_priority(switch, iface):
 
     # Todo o restante do tráfego irá automaticamente para a banda 2 (sem prioridade)
 
+#NOSSO
 def apply_htb_prio_tbf(switch, iface):
     """
     Aplica:
@@ -84,29 +90,33 @@ def apply_htb_prio_tbf(switch, iface):
     #NAO PODE FAZER ISSO AQUI SENAO VAI REMOVER LIMITE DA REDE DO MININET-> switch.cmd(f'tc qdisc del dev {iface} root')
 
     # HTB como root qdisc
-    switch.cmd(f'tc qdisc add dev {iface} root handle 1: htb default 30')
+    #HTB padrão já existe como 5:1 com 10mbit NAO PODE MUDAR A RAIZ NEM CRIAR OUTRAS switch.cmd(f'tc qdisc add dev {iface} root handle 1: htb default 30')
 
-    # Classe alta prioridade: reserva 4 Mbps, máximo 5 Mbps
-    switch.cmd(f'tc class add dev {iface} parent 1: classid 1:10 htb rate 4mbit ceil 8mbit')
+    # Classe alta prioridade: reserva 9 Mbps, máximo 9 Mbps
+    #switch.cmd(f'tc class add dev {iface} parent 1: classid 1:10 htb rate 9mbit ceil 10mbit burst 15k')
 
-    # Classe baixa prioridade: reserva 1 Mbps, máximo 5 Mbps
-    switch.cmd(f'tc class add dev {iface} parent 1: classid 1:30 htb rate 1mbit ceil 5mbit')
+    # Classe baixa prioridade: reserva 1 Mbps, máximo 2 Mbps
+    #switch.cmd(f'tc class add dev {iface} parent 1: classid 1:30 htb rate 1mbit ceil 2mbit burst 8k')
 
-    # Dentro da classe alta, adiciona prio qdisc (3 bandas de prioridade)
-    switch.cmd(f'tc qdisc add dev {iface} parent 1:10 handle 10: prio bands 3')
+    # Fila de prioridade dentro da classe 1:10 para o vídeo (3 bandas de prioridade)
+    #switch.cmd(f'tc qdisc add dev {iface} parent 5:1 handle 10: prio bands 3')
 
-    # Dentro da banda mais prioritária da prio, adiciona tbf
-    switch.cmd(f'tc qdisc add dev {iface} parent 10:1 handle 20: tbf rate 2mbit burst 10k latency 50ms')
+    # Adiciona TBF para suavizar o envio do vídeo (shaping)
+    switch.cmd(f'tc qdisc add dev {iface} parent 10:1 handle 20: tbf rate 8mbit burst 128k latency 100ms')
 
     # Filtros: RTP (portas 5004 e 5006) → classe alta prioridade
-    switch.cmd(f'tc filter add dev {iface} protocol ip parent 1:0 prio 1 u32 match ip dport 5004 0xffff flowid 1:10')
-    switch.cmd(f'tc filter add dev {iface} protocol ip parent 1:0 prio 1 u32 match ip dport 5006 0xffff flowid 1:10')
+    switch.cmd(f'tc filter add dev {iface} protocol ip parent 10: prio 0 u32 match ip dport 5004 0xffff flowid 10:1')
+    switch.cmd(f'tc filter add dev {iface} protocol ip parent 10: prio 0 u32 match ip dport 5006 0xffff flowid 10:1')
 
     # Filtro: iperf (porta 5001) → classe baixa prioridade
-    switch.cmd(f'tc filter add dev {iface} protocol ip parent 1:0 prio 2 u32 match ip dport 5001 0xffff flowid 1:30')
+    switch.cmd(f'tc filter add dev {iface} protocol ip parent 10: prio 3 u32 match ip dport 5001 0xffff flowid 10:2')
 
-    print(f"[QoS] Configuração HTB + PRIO + TBF aplicada em {iface}")
+    #print(f"[QoS] Configuração HTB + PRIO + TBF aplicada em {iface}")
 
+
+def capturar(switch, iface, nome_arquivo):
+    print(f"[Captura] Iniciando tcpdump em {iface}, salvando em {nome_arquivo}...")
+    return switch.popen(f'tcpdump -i {iface} -w {nome_arquivo}')
 
 
 def run():
@@ -123,7 +133,15 @@ def run():
     apply_htb_prio_tbf(s1, 's1-eth3')
 
     show_tc_config(s1, 's1-eth3')
-    captura = s1.popen('tcpdump -i s1-eth3 -w capturalixo.pcap')
+
+
+
+    # Inicia a captura de pacotes no link s1 → s2 para futura análise com Wireshark
+    captura = capturar(s1, 's1-eth3', 'capturaNaTeoriaBoa.pcap')
+
+    #########################################################################################
+    #INICIO DA TRANSMISSAO
+    #############################################################
 
     print("Iniciando transmissão RTP de h1 para h2...")
 
@@ -165,7 +183,9 @@ def run():
 
     print("Encerrando captura")
     captura.terminate() 
-    
+
+    show_tc_stats(s1, 's1-eth3')
+
     print("Encerrando rede...")
     net.stop()
 

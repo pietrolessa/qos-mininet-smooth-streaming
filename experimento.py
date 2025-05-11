@@ -32,16 +32,6 @@ def run():
     h1, h2, h3, h4 = net.get('h1', 'h2', 'h3', 'h4')
     s1, s2 = net.get('s1', 's2')
 
-    print("Aplicando QoS na interface s1-eth3...")
-
-    s1.cmd('tc qdisc del dev s1-eth3 root')
-    s1.cmd('tc qdisc add dev s1-eth3 root handle 1: htb default 20')
-    s1.cmd('tc class add dev s1-eth3 parent 1: classid 1:1 htb rate 1mbit ceil 10mbit')
-    s1.cmd('tc qdisc add dev s1-eth3 parent 1:1 handle 10: prio')
-    s1.cmd('tc qdisc add dev s1-eth3 parent 1:1 handle 20: tbf rate 1mbit burst 32k latency 400ms')
-    s1.cmd('tc filter add dev s1-eth3 protocol ip parent 1:0 prio 1 u32 match ip dport 5004 0xffff flowid 1:1')
-    s1.cmd('tc filter add dev s1-eth3 protocol ip parent 1:0 prio 1 u32 match ip dport 5006 0xffff flowid 1:1')
-
     print("Iniciando transmissão RTP de h1 para h2...")
 
     h1.cmd(
